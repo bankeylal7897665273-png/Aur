@@ -115,13 +115,14 @@ def create_gateway():
     username = user_data['username']
     
     api_id = str(random.randint(100000, 999999))
-    base_url = request.host_url.rstrip('/')
-    payment_url = f"{base_url}/pay/{username}"
+    
+    # FIX: Sirf path save kar rahe hain, full URL Frontend automatic detect karega (No lag, No error)
+    payment_path = f"/pay/{username}"
     
     db_put(f"apis/{user_id}/{api_id}", {
         "api_name": api_name,
         "app_name": app_name,
-        "payment_url": payment_url,
+        "payment_path": payment_path,
         "status": "Active",
         "date": str(datetime.datetime.now())
     })
@@ -129,9 +130,8 @@ def create_gateway():
     total = user_data.get('total_apis', 0)
     db_patch(f"users/{user_id}", {"total_apis": total + 1})
     
-    return jsonify({"status": "success", "message": "API Created!", "url": payment_url})
+    return jsonify({"status": "success", "message": "API Created!"})
 
-# PAY PAGE ROUTE - This handles /pay/username/amount
 @app.route('/pay/<username>/<amount>')
 def pay_page(username, amount):
     users = db_get("users") or {}
@@ -167,7 +167,6 @@ def submit_payment():
     if not user_id:
         return jsonify({"status": "error", "message": "Merchant not found."})
 
-    # 5 Minute Timer Logic
     start_time_str = session.get('pay_start_time')
     time_diff_minutes = 0
     if start_time_str:
@@ -175,12 +174,11 @@ def submit_payment():
         time_diff = datetime.datetime.now() - start_time
         time_diff_minutes = time_diff.total_seconds() / 60.0
 
-    # 3% Deduction Logic
+    # FIX: 3% Deduction Silent Calculation (Kahi dikhega nahi)
     deduction = amount * 0.03
     amount_to_add = amount - deduction
 
     if time_diff_minutes > 5.0:
-        # Late Submission -> Send to Admin
         db_put(f"manual_utr_requests/{utr}", {
             "user_id": user_id,
             "username": username,
@@ -192,14 +190,11 @@ def submit_payment():
         })
         return jsonify({"status": "warning", "message": "Time Limit Exceeded! Your UTR has been sent to Admin for manual verification."})
     else:
-        # Auto Verify (Simulated success via Cookie presence)
         if FREECHARGE_COOKIE:
-            # Update Wallet
             user_data = db_get(f"users/{user_id}")
             current_bal = float(user_data.get('wallet_balance', 0.0))
             db_patch(f"users/{user_id}", {"wallet_balance": current_bal + amount_to_add})
             
-            # Save Transaction
             txn_id = f"TXN{random.randint(100000, 999999)}"
             db_put(f"transactions/{user_id}/{txn_id}", {
                 "utr": utr,
@@ -227,7 +222,6 @@ def withdraw():
     if float(user_data.get('wallet_balance', 0.0)) < amount:
         return jsonify({"status": "error", "message": "Insufficient Balance!"})
         
-    # Deduct from wallet immediately
     new_bal = float(user_data.get('wallet_balance')) - amount
     db_patch(f"users/{user_id}", {"wallet_balance": new_bal})
     
