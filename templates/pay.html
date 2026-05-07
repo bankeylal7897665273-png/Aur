@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Payment Checkout</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f7fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .checkout-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align: center; }
+        .header h3 { color: #4a5568; margin: 0; font-weight: 400; }
+        .amount { font-size: 36px; font-weight: 800; color: #2d3748; margin: 10px 0; }
+        .qr-container { padding: 15px; border: 2px dashed #cbd5e0; border-radius: 10px; margin: 20px 0; background: #fbfbfb;}
+        .qr-container img { width: 100%; max-width: 200px; }
+        .timer { color: #e53e3e; font-weight: bold; margin-bottom: 20px; font-size: 18px; }
+        
+        .input-group { text-align: left; margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 14px; font-weight: bold; color: #4a5568; margin-bottom: 5px; }
+        .input-group input { width: 100%; padding: 12px; border: 1px solid #cbd5e0; border-radius: 6px; box-sizing: border-box; font-size: 16px; letter-spacing: 2px; text-align: center;}
+        
+        .btn { width: 100%; padding: 14px; background: #38a169; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn:hover { background: #2f855a; }
+        .merchant { font-size: 12px; color: #a0aec0; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="checkout-box">
+        <div class="header"><h3>Paying to {{ username }}</h3></div>
+        <div class="amount">₹ {{ amount }}</div>
+        
+        <div class="timer" id="timerDisplay">05:00</div>
+        
+        <div class="qr-container">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={{ upi_id }}&pn=Merchant&am={{ amount }}&cu=INR" alt="QR Code">
+        </div>
+        
+        <p style="font-size: 14px; color: #4a5568; font-weight: 600;">Scan and Pay, then enter 12-digit UTR below.</p>
+        
+        <div class="input-group">
+            <input type="number" id="utrCode" placeholder="e.g. 301234567890">
+        </div>
+        
+        <button class="btn" onclick="verifyPayment()">Verify Payment</button>
+        <div class="merchant">Secure Gateway Powered by Pro API</div>
+    </div>
+
+    <script>
+        // 5 Min Timer
+        let timeInSecs = 300;
+        let timerInterval = setInterval(() => {
+            timeInSecs--;
+            let m = Math.floor(timeInSecs / 60).toString().padStart(2, '0');
+            let s = (timeInSecs % 60).toString().padStart(2, '0');
+            document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+            if(timeInSecs <= 0) {
+                clearInterval(timerInterval);
+                document.getElementById('timerDisplay').innerText = "Time Exceeded! Manual Verification Required.";
+            }
+        }, 1000);
+
+        function verifyPayment() {
+            let utr = document.getElementById('utrCode').value;
+            if(utr.length !== 12) { Swal.fire('Error', 'UTR must be 12 digits!', 'error'); return; }
+            
+            Swal.fire({ title: 'Verifying...', didOpen: () => { Swal.showLoading() } });
+            
+            fetch('/api/submit_payment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ utr: utr, amount: '{{ amount }}', username: '{{ username }}' })
+            }).then(r=>r.json()).then(data => {
+                if(data.status === 'success') {
+                    Swal.fire('Payment Success!', data.message, 'success').then(() => {
+                        document.body.innerHTML = "<h2 style='text-align:center; margin-top:20vh; color:#38a169;'>Payment Completed. You can close this window.</h2>";
+                    });
+                } else if(data.status === 'warning') {
+                    Swal.fire('Manual Verification', data.message, 'warning');
+                } else {
+                    Swal.fire('Error', data.message, 'error');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
